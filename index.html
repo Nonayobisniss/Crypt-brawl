@@ -100,6 +100,19 @@
   #ob.net .big.code{ font-size:46px; letter-spacing:12px; color:var(--ember-hot,#ffb347); }
   #ob.net input.codein{ width:150px; text-align:center; font:bold 30px 'Courier New',monospace; letter-spacing:8px; color:#ffd27a; background:#120c0f; border:2px solid #5a3a22; padding:6px 4px 6px 12px; text-transform:uppercase; }
   #ob.net input.codein:focus{ outline:none; border-color:var(--ember); }
+  #ob.net input.ain{ width:100%; box-sizing:border-box; font:bold 14px 'Courier New',monospace; letter-spacing:2px; color:#ffd27a; background:#120c0f; border:2px solid #5a3a22; padding:8px 10px; }
+  #ob.net input.ain:focus{ outline:none; border-color:var(--ember); }
+  #ob.net .warn{ font-size:10px; color:#ffb347; max-width:420px; line-height:1.5; }
+  #ob.net .pgrid{ display:grid; grid-template-columns:repeat(3,1fr); gap:6px; width:100%; }
+  #ob.net .pc{ background:#120c0f; border:2px solid #3a2a1c; padding:6px 4px; }
+  #ob.net .pk{ font-size:9px; letter-spacing:2px; color:#9a7a52; }
+  #ob.net .pv{ font-size:18px; color:#ffd27a; margin-top:2px; text-shadow:2px 2px 0 #000; }
+  #ob.net .lb{ width:100%; max-height:46vh; overflow:auto; display:flex; flex-direction:column; gap:3px; }
+  #ob.net .lbrow{ display:flex; gap:10px; align-items:center; background:#120c0f; border:2px solid #2a1e16; padding:4px 10px; font-size:12px; }
+  #ob.net .lbrow.me{ border-color:var(--ember); color:#fff; }
+  #ob.net .lbrow .n{ width:26px; color:#9a7a52; text-align:right; }
+  #ob.net .lbrow .nm{ flex:1; text-align:left; overflow:hidden; text-overflow:ellipsis; }
+  #ob.net .lbrow .rt{ color:#ffd27a; }
   .hidden{ display:none !important; }
 </style>
 </head>
@@ -1274,6 +1287,7 @@ function drawVicButtons(p,t,col){
 }
 function startVictory(){
  {const w0=S.w>=0?S.p[S.w]:null,l0=w0?S.p[1-S.w]:null;finFm=[w0?w0.fm|0:0,l0?l0.fm|0:0]}
+ if(mode===3&&S&&S.w>=0)rankedReport(S.w===NET.li);
  victoryT=0;victoryMenu=false;victorySel=0;finisherDone=false;finisherSeed=Math.random()*9999;
  finLast=0;finDt=16;finAcc={};finEv={};
  overlay.classList.add('hidden');overlay.classList.remove('victory');
@@ -2200,9 +2214,10 @@ function difficultyMenu(){
  ]);
 }
 function title(){
- showOv('','',[['VS CPU',()=>difficultyMenu()],['2 PLAYERS',()=>toSelect(2)],['PLAY',()=>playMenu()],['ADVENTURERS',()=>openAdv()]]);
+ showOv('','',[['VS CPU',()=>difficultyMenu()],['2 PLAYERS',()=>toSelect(2)],['PLAY',()=>playMenu()],['ADVENTURERS',()=>openAdv()],[ACCT.user?ACCT.user.name:'SIGN IN',()=>acctMenu()]]);
  overlay.classList.add('titlemenu');
- const b=document.querySelector('#ob button');if(b)b.focus()}
+ const bs=document.querySelectorAll('#ob button');if(bs[4])bs[4].dataset.acct='1';
+ if(bs[0])bs[0].focus()}
 const KDEF=JSON.stringify(KEYS);
 try{const sv=JSON.parse(localStorage.getItem('cb_keys')||'null');if(Array.isArray(sv)&&sv.length===2)sv.forEach((m,i)=>{KEYS[i]=m})}catch(e){}
 const saveKeys=()=>{try{localStorage.setItem('cb_keys',JSON.stringify(KEYS))}catch(e){}};
@@ -2913,11 +2928,11 @@ function drawSelect(){
   const sm=cw<42,ls=cw<80?wrapTxt(c.d,Math.floor(cw/(sm?3.05:3.7))).slice(0,2):[c.d];
   ls.forEach((l,k)=>txt(l,mid,(ls.length>1?188:192)+k*(sm?7:8),cw<80?(sm?5:6):7,'#cfd0d8'));
   [0,1].forEach(pi=>{if(sel[pi]===i){ctx.strokeStyle=pi?'#7fd0ff':'#ffd27a';ctx.lineWidth=2;ctx.strokeRect(x-2-pi*3,56-pi*3,cw+4+pi*6,144+pi*6);
-   txt(mode===3?(pi===NET.li?'YOU':'OPP')+(lock[pi]?' OK':''):mode===1&&pi?'CPU':'P'+(pi+1)+(lock[pi]?' OK':''),x+(pi?cw*.75:cw*.25),50-pi*8,8,pi?'#7fd0ff':'#ffd27a')}})});
+   txt(mode===3?acctNm(pi===NET.li)+(lock[pi]?' OK':''):mode===1&&pi?'CPU':'P'+(pi+1)+(lock[pi]?' OK':''),x+(pi?cw*.75:cw*.25),50-pi*8,8,pi?'#7fd0ff':'#ffd27a')}})});
  txt(mode===1||mode===3?'A/D or mouse choose · F or click confirm':'P1 A/D+F or click  ·  P2 ←/→+K',W/2,232,9,'#cfd0d8')}
 function indicators(){
  S.p.forEach((p,i)=>{if(p.rs>0||S.phase==='portal')return;
-  const col=i?'#7fd0ff':'#ffd27a',lb=mode===3?(i===NET.li?'YOU':'OPP'):(mode===1&&i)?'CPU':'P'+(i+1);
+  const col=i?'#7fd0ff':'#ffd27a',lb=mode===3?acctNm(i===NET.li):(mode===1&&i)?'CPU':'P'+(i+1);
   if(p.x>=4&&p.x<=W-4&&p.y>=14&&p.y<=H){
    if(p.y<40){txt(lb,p.x,p.y+10,7,col);return}
    ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(p.x-3,p.y-31);ctx.lineTo(p.x+3,p.y-31);ctx.lineTo(p.x,p.y-27);ctx.fill();
@@ -2940,7 +2955,7 @@ function render(){
    if(!b.kn)return;ctx.save();ctx.translate(b.x,b.y);ctx.scale(b.f,1);ctx.fillStyle='#5a3a1a';ctx.fillRect(-7,-1,3,2);ctx.fillStyle='#e6ffd0';ctx.fillRect(-4,-1,7,2);ctx.fillStyle='#fff';ctx.fillRect(3,-1,2,1);ctx.restore()});
   drawCountdown()}
  if(mode===3)netHud();
- if(scene==='victory')drawVictory();
+ if(scene==='victory'){drawVictory();drawRankedResult()}
  if(fadeIn>0){ctx.fillStyle='rgba(0,0,0,'+fadeIn.toFixed(3)+')';ctx.fillRect(-10,-10,W+20,H+20)}
  ctx.restore()}
 
@@ -3235,7 +3250,7 @@ function netTeardown(){
  const N=NET;clearInterval(N.pingT);
  [N.gc,N.cc].forEach(c=>{if(c){c.onopen=c.onclose=c.onmessage=null;try{c.close()}catch(e){}}});
  if(N.pc){N.pc.onconnectionstatechange=null;try{N.pc.close()}catch(e){}}
- N.gc=N.cc=N.pc=null;N.on=false;N.rtt=0;N.early=[];N.rmL=N.rmR=false;N.stall=0;N.mid=0;N.lostShown=false;N.ui=null}
+ N.gc=N.cc=N.pc=null;N.on=false;N.rtt=0;N.early=[];N.rmL=N.rmR=false;N.stall=0;N.mid=0;N.lostShown=false;N.ui=null;RK.match='';RK.opp=null}
 function netClose(){netSend({t:'bye'});const pc=NET.pc;setTimeout(()=>{if(NET.pc===pc)netTeardown()},120);NET.on=false;mode=1}
 function netPeer(role){
  const ui=NET.ui;netTeardown();NET.ui=ui;const N=NET;N.role=role;N.li=role==='host'?0:1;N.ri=1-N.li;
@@ -3263,7 +3278,9 @@ function netOpen(){
 function netLost(msg){
  const N=NET;
  if(!N.on){if(N.ui)N.ui(msg,true);return}
- if(N.lostShown)return;netTeardown();N.lostShown=true;mode=1;
+ if(N.lostShown)return;
+ if(RK.match&&scene==='fight'&&S&&S.phase==='fight')rankedReport(true,true);   // opponent vanished mid-match: counts as a win
+ netTeardown();N.lostShown=true;mode=1;
  showOv('DISCONNECTED',msg||'The connection was lost.',[['OK',()=>{N.lostShown=false;intro(true)}]])}
 // ---- control messages ----
 function netCtl(m){
@@ -3371,6 +3388,86 @@ function netJoinUI(){
   netEl('div','lab','HOST’S CODE'),inn,(()=>{const r=netEl('div','row');r.append(netBtn('PASTE',()=>netPaste(inn)),go,netBtn('BACK',()=>netMenu()));return r})(),outBox,st])}
 function netLeaveMenu(){showOv('LEAVE MATCH?','The match keeps running for your opponent while this is open.',[['STAY',()=>{}],['LEAVE',()=>{netClose();intro(true)}]])}
 addEventListener('pagehide',()=>{if(NET.on)netSend({t:'bye'})});
+// ===================== ACCOUNTS: sign in, profile, leaderboard, ranked results =====================
+// Uses the matchmaker server (/register /login /me /leaderboard /report). The session token is kept in localStorage.
+const ACCT={tok:'',user:null},RK={match:'',opp:null,sent:-1,res:null,poll:0};
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function acctSave(){try{if(ACCT.tok)localStorage.setItem('cb_acct',JSON.stringify({tok:ACCT.tok,user:ACCT.user}));else localStorage.removeItem('cb_acct')}catch(e){}}
+function acctLoad(){try{const s=JSON.parse(localStorage.getItem('cb_acct')||'null');if(s&&s.tok){ACCT.tok=s.tok;ACCT.user=s.user||null}}catch(e){}}
+function acctLabel(){const b=document.querySelector('[data-acct]');if(b)b.textContent=ACCT.user?ACCT.user.name:'SIGN IN'}
+function acctOut(){ACCT.tok='';ACCT.user=null;acctSave();acctLabel()}
+const acctCall=(path,body)=>mmHttp(mmUrl(),path,body,'POST',25000);   // long timeout: free hosts take a while to wake up
+async function acctAuth(path,name,pass){const j=await acctCall(path,{name,pass});ACCT.tok=j.token;ACCT.user=j.profile;acctSave();acctLabel();return j.profile}
+async function acctRefresh(){
+ if(!ACCT.tok)return null;
+ try{const j=await acctCall('/me',{token:ACCT.tok});ACCT.user=j.profile;acctSave();acctLabel();return j.profile}
+ catch(e){if(e.status===401)acctOut();throw e}}
+const acctNm=mine=>mine?(ACCT.user&&RK.opp?ACCT.user.name.slice(0,14):'YOU'):(RK.opp&&RK.opp.name?RK.opp.name.slice(0,14):'OPP');
+const TIERS=[[1700,'LEGEND'],[1500,'WARLORD'],[1300,'CHAMPION'],[1100,'KNIGHT'],[900,'SQUIRE'],[0,'SKELETON']];
+const tierOf=r=>(TIERS.find(t=>r>=t[0])||TIERS[5])[1];
+function acctMenu(){if(ACCT.tok&&ACCT.user)profilePanel();else signInPanel()}
+function acctInput(type,ph,max,ac){
+ const i=netEl('input','ain');i.type=type;i.placeholder=ph;i.maxLength=max;i.autocomplete=ac;i.name=ac;i.spellcheck=false;i.autocapitalize='off';
+ ['keydown','keyup'].forEach(ev=>i.addEventListener(ev,e=>e.stopPropagation()));return i}
+function signInPanel(o){
+ o=o||{};const create=!!o.create,bad=(st,m)=>{st.style.color='#ff8a6a';st.textContent=m};
+ const nm=acctInput('text','Username',16,'username'),pw=acctInput('password','Password',64,create?'new-password':'current-password'),pw2=acctInput('password','Repeat password',64,'new-password');
+ pw2.style.display=create?'':'none';
+ const st=netEl('div','st',o.note||''),warn=netEl('div','warn','');
+ const go=netBtn(create?'CREATE ACCOUNT':'SIGN IN',async()=>{
+  const n=nm.value.trim(),p=pw.value;
+  if(!/^[A-Za-z0-9_]{3,16}$/.test(n))return bad(st,'Names are 3 to 16 characters: letters, numbers and _ only.');
+  if(create){if(p.length<6)return bad(st,'Passwords need at least 6 characters.');if(p!==pw2.value)return bad(st,'The two passwords do not match.')}
+  else if(!p)return bad(st,'Enter your password.');
+  go.disabled=true;st.style.color='#ffd27a';st.textContent=create?'Creating your account…':'Signing in…';
+  try{await acctAuth(create?'/register':'/login',n,p);if(o.next)o.next();else profilePanel()}
+  catch(e){bad(st,e.message+(/did not answer|Could not reach/.test(e.message)?' The server may be waking up, so try again in a few seconds.':''));go.disabled=false}});
+ [nm,pw,pw2].forEach(i=>i.addEventListener('keydown',e=>{if(e.key==='Enter')go.click()}));
+ const row=netEl('div','row');row.append(go,netBtn(create?'I HAVE AN ACCOUNT':'NEW ACCOUNT',()=>signInPanel({...o,create:!create,note:''})),netBtn('BACK',()=>(o.back||title)()));
+ netPanel(create?'CREATE ACCOUNT':'SIGN IN',create?'Pick a name and a password. Your rating and wins are saved to this account.':'Sign in to play ranked matches and climb the leaderboard.',[nm,pw,pw2,row,st,warn]);
+ setTimeout(()=>nm.focus(),50);
+ mmHttp(mmUrl(),'/health',null,'GET',20000).then(h=>{if(h&&h.accounts==='memory')warn.textContent='Heads up: this server is not saving accounts permanently yet, so they can be wiped when it restarts.'}).catch(()=>{})}
+function profilePanel(){
+ const u=ACCT.user;if(!ACCT.tok||!u)return signInPanel();
+ const grid=netEl('div','pgrid'),st=netEl('div','st',''),tier=netEl('div','lab',tierOf(u.rating));
+ const fill=p=>{grid.innerHTML='';[['RATING',p.rating],['RANK',p.rank?'#'+p.rank:'-'],['MATCHES',p.games],['WINS',p.wins],['LOSSES',p.losses],['WIN RATE',p.games?Math.round(p.wins/p.games*100)+'%':'-']].forEach(([k,v])=>{const c=netEl('div','pc');c.append(netEl('div','pk',k),netEl('div','pv',String(v)));grid.append(c)})};
+ fill(u);
+ const row=netEl('div','row');row.append(netBtn('RANKED MATCH',()=>rankedGo()),netBtn('LEADERBOARD',()=>leaderboardPanel(profilePanel)),netBtn('SIGN OUT',()=>{acctOut();title()}),netBtn('BACK',()=>title()));
+ netPanel('PROFILE','',[netEl('div','big',u.name),tier,grid,row,st]);
+ acctRefresh().then(p=>{if(p){fill(p);tier.textContent=tierOf(p.rating)}}).catch(e=>{
+  if(e.status===401){bad401()}else{st.style.color='#ff8a6a';st.textContent='Could not refresh your stats: '+e.message}});
+ function bad401(){if(document.getElementById('ot').textContent==='PROFILE')signInPanel({note:'Your session expired. Please sign in again.'})}}
+async function leaderboardPanel(back){
+ const list=netEl('div','lb'),st=netEl('div','st','Loading…'),row=netEl('div','row');
+ row.append(netBtn('BACK',()=>(back||playMenu)()));
+ netPanel('LEADERBOARD','Top players by rating.',[list,st,row]);
+ try{
+  const j=await mmHttp(mmUrl(),'/leaderboard',null,'GET',20000),me=ACCT.user&&ACCT.user.name.toLowerCase();
+  st.textContent=j.top&&j.top.length?'':'No ranked players yet. Be the first!';
+  (j.top||[]).forEach((e,i)=>{const r=netEl('div','lbrow'+(me&&e.name.toLowerCase()===me?' me':''));r.append(netEl('span','n',String(i+1)),netEl('span','nm',e.name),netEl('span','rt',String(e.rating)));list.append(r)})}
+ catch(e){st.style.color='#ff8a6a';st.textContent=e.message}}
+function rankedGo(){
+ if(!ACCT.tok||!ACCT.user)return signInPanel({note:'Sign in to play ranked.',next:()=>rankedGo(),back:playMenu});
+ mmGate(()=>mmSearch('mm','',false,true))}
+// report who won a ranked match; the server settles it once both players have reported (or one is missing)
+async function rankedReport(won,forfeit){
+ if(!ACCT.tok||!RK.match||RK.sent===NET.mid)return;
+ const mine=RK.match,tok=ACCT.tok,rd=Math.max(0,NET.mid-1),key=++RK.poll;RK.sent=NET.mid;RK.res=null;
+ for(let n=0;n<34;n++){
+  let j=null;
+  try{j=await acctCall('/report',{token:tok,match:mine,round:rd,win:!!won})}
+  catch(e){if(e.status===401||e.status===403||e.status===404)return}
+  if(j&&j.done){if(RK.poll===key&&RK.match===mine)RK.res=j;acctRefresh().catch(()=>{});return}
+  await new Promise(r=>setTimeout(r,3000))}}
+function drawRankedResult(){
+ if(!RK.match||!(victoryMenu||victoryT>FIN_T+VZT+900))return;
+ const r=RK.res,x=W-62,y=30;
+ ctx.save();ctx.fillStyle='rgba(8,4,6,.78)';ctx.fillRect(x-56,y-12,112,34);ctx.strokeStyle='#6b5238';ctx.lineWidth=1;ctx.strokeRect(x-55.5,y-11.5,111,33);ctx.restore();
+ txt('RANKED',x,y-2,7,'#ffb347');
+ if(!r)txt('UPDATING…',x,y+12,8,'#cfd0d8');
+ else if(r.void)txt('NOT COUNTED',x,y+12,8,'#cfd0d8');
+ else txt(r.rating+'  '+(r.delta>=0?'+':'')+r.delta,x,y+12,9,r.delta>=0?'#8fe08f':'#ff8a6a')}
+
 // ===================== PLAY MENU: matchmaking + private servers =====================
 // A small matchmaker server (matchmaker-server.js) pairs players and relays the WebRTC handshake.
 // Once the two machines are connected they talk directly and the server is no longer involved.
@@ -3379,8 +3476,8 @@ const MM={es:null,id:null,kind:'',code:'',role:'',t0:0,tick:0,n:0,online:0,tries
 function mmUrl(){let u='';try{u=localStorage.getItem('cb_mm')||''}catch(e){}return(u||MM_DEFAULT).trim().replace(/\/+$/,'')}
 function mmNorm(u){u=String(u||'').trim().replace(/\/+$/,'');if(!u)return'';if(!/^https?:\/\//i.test(u))u=(/^(localhost|127\.|10\.|192\.168\.|\[::1\])/i.test(u)?'http://':'https://')+u;return u}
 function mmSetUrl(u){try{if(u)localStorage.setItem('cb_mm',u);else localStorage.removeItem('cb_mm')}catch(e){}}
-async function mmHttp(base,path,body,method){
- const c=new AbortController(),to=setTimeout(()=>c.abort(),8000);
+async function mmHttp(base,path,body,method,ms){
+ const c=new AbortController(),to=setTimeout(()=>c.abort(),ms||8000);
  try{const r=await fetch(base+path,method==='GET'?{signal:c.signal}:{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(body||{}),signal:c.signal});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(j.error||('Server error '+r.status)),{status:r.status});return j}
  catch(e){if(e.name==='AbortError')throw new Error('The server did not answer.');if(e instanceof TypeError)throw new Error('Could not reach the server.');throw e}
@@ -3396,8 +3493,8 @@ function mmSig(d){return mmPost('/signal',{id:MM.id,d}).catch(()=>{})}
 // ---- panels ----
 function playMenu(){
  mmStop(true);netTeardown();mode=1;
- showOv('PLAY','Play against people online.',[
-  ['MATCHMAKING',()=>mmGate(()=>mmSearch('mm'))],['PRIVATE SERVER',()=>privMenu()],['SERVER SETTINGS',()=>mmConfig(playMenu,false)],['BACK',()=>title()]])}
+ showOv('PLAY',ACCT.user?'Signed in as <b>'+esc(ACCT.user.name)+'</b> · '+ACCT.user.rating+' rating':'Play against people online. Sign in to play ranked and appear on the leaderboard.',[
+  ['QUICK MATCH',()=>mmGate(()=>mmSearch('mm'))],['RANKED MATCH',()=>rankedGo()],['PRIVATE SERVER',()=>privMenu()],['LEADERBOARD',()=>leaderboardPanel(playMenu)],['SERVER SETTINGS',()=>mmConfig(playMenu,false)],['BACK',()=>title()]])}
 function privMenu(){
  mmStop(true);netTeardown();
  showOv('PRIVATE SERVER','Create a server and share its code, or join a friend’s.',[
@@ -3427,30 +3524,31 @@ function mmJoinPanel(err){
 function mmRender(){
  const e=MM.els;if(!e)return;
  const sec=Math.floor((Date.now()-MM.t0)/1000),dots='.'.repeat(1+Math.floor(Date.now()/450)%3);
- if(MM.phase==='found'){e.big.textContent='OPPONENT FOUND';e.sub.textContent=e.msg||'Connecting…';return}
+ if(MM.phase==='found'){e.big.textContent='OPPONENT FOUND';e.sub.textContent=(RK.opp?RK.opp.name+'   ·   '+RK.opp.rating+' rating\n':'')+(e.msg||'Connecting…');return}
  if(MM.kind==='mm'){
   e.big.textContent='SEARCHING'+dots;
-  e.sub.textContent=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')+'   ·   '+Math.max(1,MM.online)+' online · '+Math.max(1,MM.n)+' searching'+(e.msg?'\n'+e.msg:'')}
+  e.sub.textContent=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')+'   ·   '+Math.max(1,MM.online)+' online · '+Math.max(1,MM.n)+' searching'+(MM.ranked&&MM.r?'\nRating '+MM.r+'   ·   looking for '+(MM.w>=9999?'any opponent':'within ±'+MM.w):'')+(e.msg?'\n'+e.msg:'')}
  else if(MM.kind==='create'){
   e.big.textContent=MM.code||'…';e.sub.textContent='Share this code with your friend. Waiting for them to join'+dots+(e.msg?'\n'+e.msg:'')}
  else{e.big.textContent='JOINING '+MM.code;e.sub.textContent='Connecting…'}}
 function mmShow(){
  const big=netEl('div',MM.kind==='create'?'big code':'big'),sub=netEl('div','st');sub.style.whiteSpace='pre-line';
  MM.els={big,sub,msg:''};
- netPanel(MM.kind==='mm'?'MATCHMAKING':MM.kind==='create'?'YOUR SERVER':'JOIN SERVER',MM.kind==='mm'?'Looking for an opponent…':MM.kind==='create'?'Private server':'',[big,sub,(()=>{const r=netEl('div','row');r.append(netBtn('CANCEL',()=>{mmStop(true);netTeardown();MM.kind==='mm'?playMenu():privMenu()}));return r})()]);
+ netPanel(MM.kind==='mm'?(MM.ranked?'RANKED MATCH':'QUICK MATCH'):MM.kind==='create'?'YOUR SERVER':'JOIN SERVER',MM.kind==='mm'?(MM.ranked?'Looking for an opponent near your rating…':'Looking for an opponent…'):MM.kind==='create'?'Private server':'',[big,sub,(()=>{const r=netEl('div','row');r.append(netBtn('CANCEL',()=>{mmStop(true);netTeardown();MM.kind==='mm'?playMenu():privMenu()}));return r})()]);
  clearInterval(MM.tick);MM.tick=setInterval(mmRender,300);mmRender()}
 function mmProblem(msg,retry){
  mmStop(true);netTeardown();
  const r=[];if(retry)r.push(['TRY AGAIN',retry]);r.push(['BACK',()=>MM.kind==='mm'?playMenu():privMenu()]);
  showOv('CONNECTION PROBLEM',msg,r)}
 // ---- searching / hosting / joining ----
-async function mmSearch(kind,code,keepTries){
+async function mmSearch(kind,code,keepTries,ranked){
  mmStop(true);netTeardown();
  if(!keepTries)MM.tries=0;
+ MM.ranked=!!ranked&&kind==='mm';MM.w=0;MM.r=0;RK.match='';RK.opp=null;RK.res=null;
  MM.kind=kind;MM.code=code||'';MM.t0=Date.now();MM.live=true;MM.phase='search';MM.role='';MM.n=MM.online=0;
  mmShow();
  try{
-  const j=await mmPost('/ticket',{mode:kind,code});
+  const j=await mmPost('/ticket',{mode:kind,code,ranked:MM.ranked,token:MM.ranked?ACCT.tok:undefined});
   MM.id=j.id;if(j.code)MM.code=j.code;mmRender();
   const es=new EventSource(mmUrl()+'/events?id='+encodeURIComponent(MM.id));MM.es=es;
   es.onmessage=e=>{try{mmEvent(JSON.parse(e.data))}catch(err){console.error(err)}};
@@ -3459,19 +3557,21 @@ async function mmSearch(kind,code,keepTries){
    if(MM.es!==es||NET.on)return;
    const dead=es.readyState===2||(MM.errSince&&Date.now()-MM.errSince>9000);
    if(!MM.errSince)MM.errSince=Date.now();
-   if(dead)mmProblem('Lost contact with the matchmaking server.',()=>mmSearch(kind,code))}}
+   if(dead)mmProblem('Lost contact with the matchmaking server.',()=>mmSearch(kind,code,false,MM.ranked))}}
  catch(e){
+  if(MM.ranked&&e.status===401){acctOut();mmStop(false);return signInPanel({note:'Your session expired. Please sign in again.',next:()=>rankedGo(),back:playMenu})}
   if(kind==='join'&&e.status===404){mmStop(false);return mmJoinPanel(e.message)}
-  mmProblem(e.message+' Check the address under SERVER SETTINGS.',()=>mmSearch(kind,code))}}
+  mmProblem(e.message+' Check the address under SERVER SETTINGS.',()=>mmSearch(kind,code,false,MM.ranked))}}
 function mmEvent(m){
  switch(m.t){
-  case 'q':MM.n=m.n;MM.online=m.online;mmRender();break;
-  case 'matched':mmMatched(m.role);break;
+  case 'q':MM.n=m.n;MM.online=m.online;if(m.w!==undefined){MM.w=m.w;MM.r=m.r}mmRender();break;
+  case 'matched':mmMatched(m.role,m);break;
   case 'sig':mmSignal(m.d);break;
   case 'left':if(!NET.on)mmRetry('Your opponent left before the match started.');break;
   case 'error':mmProblem(m.m||'The server closed this lobby.');break}}
-async function mmMatched(role){
+async function mmMatched(role,m){
  if(NET.on)return;
+ RK.match=(m&&m.match)||'';RK.opp=(m&&m.opp)||null;RK.sent=-1;RK.res=null;
  MM.role=role;MM.phase='found';if(MM.els)MM.els.msg='Connecting…';mmRender();
  NET.ui=(t,bad)=>{if(bad)mmRetry(t);else if(MM.els){MM.els.msg=t;mmRender()}};
  clearTimeout(MM.hs);MM.hs=setTimeout(()=>{if(!NET.on)mmRetry('The connection to your opponent timed out.')},MM.hsMs);
@@ -3485,9 +3585,9 @@ async function mmSignal(d){
 function mmRetry(msg){
  if(NET.on||!MM.live&&!MM.id)return;
  const kind=MM.kind;clearTimeout(MM.hs);
- if(kind==='mm'&&MM.tries<5){MM.tries++;mmSearch('mm','',true);if(MM.els){MM.els.msg=msg+' Searching again…';mmRender()}return}
+ if(kind==='mm'&&MM.tries<5){MM.tries++;mmSearch('mm','',true,MM.ranked);if(MM.els){MM.els.msg=msg+' Searching again…';mmRender()}return}
  if(kind==='create'&&MM.tries<5){MM.tries++;mmSearch('create','',true);if(MM.els){MM.els.msg=msg+' New code ready.';mmRender()}return}
- mmProblem(msg,kind==='mm'?()=>mmSearch('mm'):null)}
+ mmProblem(msg,kind==='mm'?()=>mmSearch('mm','',false,MM.ranked):null)}
 
 let last=performance.now(),acc=0;
 function loop(now){
@@ -3527,6 +3627,7 @@ canvas.addEventListener('mousemove',e=>{
  const i=vbAt(e);if(i>=0)victorySel=i;canvas.style.cursor=i>=0?'pointer':''
 });
 
+acctLoad();if(ACCT.tok)acctRefresh().catch(()=>{});
 intro();requestAnimationFrame(loop);
 
 })();
