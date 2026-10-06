@@ -3374,7 +3374,7 @@ addEventListener('pagehide',()=>{if(NET.on)netSend({t:'bye'})});
 // ===================== PLAY MENU: matchmaking + private servers =====================
 // A small matchmaker server (matchmaker-server.js) pairs players and relays the WebRTC handshake.
 // Once the two machines are connected they talk directly and the server is no longer involved.
-const MM_DEFAULT='';   // set this to your deployed matchmaker address to ship it as the default, e.g. 'https://crypt-brawl.onrender.com'
+const MM_DEFAULT='https://crypt-brawl.onrender.com';   // set this to your deployed matchmaker address to ship it as the default, e.g. 'https://crypt-brawl.onrender.com'
 const MM={es:null,id:null,kind:'',code:'',role:'',t0:0,tick:0,n:0,online:0,tries:0,hs:0,hsMs:20000,els:null,live:false,phase:''};
 function mmUrl(){let u='';try{u=localStorage.getItem('cb_mm')||''}catch(e){}return(u||MM_DEFAULT).trim().replace(/\/+$/,'')}
 function mmNorm(u){u=String(u||'').trim().replace(/\/+$/,'');if(!u)return'';if(!/^https?:\/\//i.test(u))u=(/^(localhost|127\.|10\.|192\.168\.|\[::1\])/i.test(u)?'http://':'https://')+u;return u}
