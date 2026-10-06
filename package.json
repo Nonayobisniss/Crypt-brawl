@@ -1,1 +1,6 @@
-   { "name": "crypt-brawl-matchmaker", "version": "1.0.0", "scripts": { "start": "node matchmaker-server.js" } }
+{
+  "name": "crypt-brawl-matchmaker",
+  "version": "2.0.0",
+  "scripts": { "start": "node matchmaker-server.js" },
+  "engines": { "node": ">=18" }
+}
