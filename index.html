@@ -3403,7 +3403,8 @@ function playMenu(){
  mmStop(true);netTeardown();mode=1;
  showOv('PLAY',accLine(),[
   ['RANKED MATCH',()=>mmGate(()=>accGate(()=>{MM.ranked=true;mmSearch('mm')}))],['QUICK MATCH',()=>mmGate(()=>{MM.ranked=false;mmSearch('mm')})],
-  ['PRIVATE SERVER',()=>privMenu()],['ACCOUNT',()=>mmGate(()=>accMenu())],['SERVER SETTINGS',()=>mmConfig(playMenu,false)],['BACK',()=>title()]])}
+  ['PRIVATE SERVER',()=>privMenu()],['ACCOUNT',()=>mmGate(()=>accMenu())],['SERVER SETTINGS',()=>mmConfig(playMenu,false)],['BACK',()=>title()]])
+ if(ACC.token)accRefresh().then(()=>{if(ACC.token&&document.getElementById('ot').textContent==='PLAY')document.getElementById('os').innerHTML=accLine()})}
 function privMenu(){
  mmStop(true);netTeardown();
  showOv('PRIVATE SERVER','Create a server and share its code, or join a friend’s.',[
@@ -3541,21 +3542,28 @@ async function lbPanel(){
   box.textContent=j.top.length?j.top.map((q,i)=>String(i+1).padStart(2)+'.  '+q.name.padEnd(17)+String(q.rating).padStart(5)+(ACC.name&&q.name.toLowerCase()===ACC.name.toLowerCase()?'   < you':'')).join('\n'):'No ranked players yet. Be the first!'}
  catch(e){box.textContent=e.message}}
 function accVictoryHud(){
- const r=ACC.res;if(!NET.match||!r)return;
- const t=r.state==='pending'?'RANKED · UPDATING RATING…':r.state==='void'?'RANKED · RESULTS DISAGREED, NO CHANGE':'RANKED · '+r.rating+'  ('+(r.delta>=0?'+':'')+r.delta+')';
- txt(t,362,40,7,r.state==='done'?(r.delta>=0?'#8fe08f':'#ff8a6a'):'#ffd27a')}
+ if(!NET.match){txt('UNRANKED MATCH · USE PLAY > RANKED MATCH FOR RATING',362,40,6,'#8a8a96');return}
+ const r=ACC.res;if(!r)return;
+ const t=r.state==='pending'?'RANKED · WAITING FOR RESULT…':r.state==='void'?'RANKED · RESULTS DISAGREED, NO CHANGE':r.state==='error'?'RANKED · '+r.msg:'RANKED · '+r.rating+'  ('+(r.delta>=0?'+':'')+r.delta+')';
+ txt(t,362,40,r.state==='error'?6:7,r.state==='done'?(r.delta>=0?'#8fe08f':'#ff8a6a'):r.state==='error'?'#ff8a6a':'#ffd27a')}
 // both players report who won; the server only changes ratings when the two reports agree (or one never arrives)
 async function accReport(match,round,win){
  if(!match||!ACC.token)return;
- const mine={state:'pending',round};ACC.res=mine;
- for(let k=0;k<30&&ACC.res===mine;k++){
-  try{const j=await mmPost('/report',{token:ACC.token,match,round,win});
-   if(j.done){if(ACC.res!==mine)return;
+ const mine={state:'pending',round};ACC.res=mine;let fails=0;
+ for(let k=0;k<36&&ACC.res&&ACC.res.round===round&&ACC.res.state!=='done'&&ACC.res.state!=='void';k++){
+  try{const j=await mmPost('/report',{token:ACC.token,match,round,win});fails=0;
+   if(ACC.res.round!==round)return;
+   if(j.done){
     if(j.void)ACC.res={state:'void',round};
     else{ACC.res={state:'done',round,win:j.win,delta:j.delta,rating:j.rating};ACC.rating=j.rating;ACC.games++;if(j.win)ACC.wins++;else ACC.losses++;accSave()}
-    accRefresh();return}}
-  catch(e){if(e&&e.status&&e.status<500&&e.status!==429)return}
-  await new Promise(r=>setTimeout(r,k<2?2000:5000))}}
+    accRefresh();return}
+   ACC.res={state:'pending',round}}
+  catch(e){
+   if(e&&e.status===401){ACC.res={state:'error',round,msg:'SESSION EXPIRED · SIGN IN AGAIN'};return}
+   if(e&&e.status&&e.status<500&&e.status!==429){ACC.res={state:'error',round,msg:'RESULT REJECTED · '+String(e.message||'').toUpperCase().slice(0,40)};return}
+   if(++fails>=2&&ACC.res.round===round)ACC.res={state:'error',round,msg:'COULD NOT REACH SERVER · RETRYING'}}
+  await new Promise(r=>setTimeout(r,k<2?2000:5000))}
+ if(ACC.res&&ACC.res.round===round&&ACC.res.state==='pending')ACC.res={state:'error',round,msg:'NO RESULT YET · CHECK YOUR ACCOUNT LATER'}}
 
 let last=performance.now(),acc=0;
 function loop(now){

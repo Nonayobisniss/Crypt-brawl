@@ -40,6 +40,7 @@ function memDb(){
   async get(k){const e=exp(k);return e?JSON.parse(e.v):null},
   async set(k,o,ex){kv.set(k,{v:JSON.stringify(o),x:ex?Date.now()+ex*1000:0})},
   async setnx(k,o,ex){if(exp(k))return false;kv.set(k,{v:JSON.stringify(o),x:ex?Date.now()+ex*1000:0});return true},
+  async del(k){kv.delete(k)},
   async zset(n,m,s){if(!z.has(n))z.set(n,new Map());z.get(n).set(m,s)},
   async ztop(n,c){const a=[...(z.get(n)||new Map())].sort((x,y)=>y[1]-x[1]).slice(0,c);return a.map(([name,r])=>({name,rating:Math.round(r)}))},
   async zrank(n,m){const a=[...(z.get(n)||new Map())].sort((x,y)=>y[1]-x[1]);const i=a.findIndex(e=>e[0]===m);return i<0?null:i+1}}}
@@ -53,6 +54,7 @@ function redisDb(){
   async get(k){const v=await cmd(['GET',k]);return v==null?null:JSON.parse(v)},
   async set(k,o,ex){await cmd(ex?['SET',k,JSON.stringify(o),'EX',String(ex)]:['SET',k,JSON.stringify(o)])},
   async setnx(k,o,ex){return(await cmd(ex?['SET',k,JSON.stringify(o),'NX','EX',String(ex)]:['SET',k,JSON.stringify(o),'NX']))==='OK'},
+  async del(k){await cmd(['DEL',k])},
   async zset(n,m,s){await cmd(['ZADD',n,String(s),m])},
   async ztop(n,c){const a=await cmd(['ZREVRANGE',n,'0',String(c-1),'WITHSCORES']),o=[];for(let i=0;i+1<a.length;i+=2)o.push({name:a[i],rating:Math.round(+a[i+1])});return o},
   async zrank(n,m){const r=await cmd(['ZREVRANK',n,m]);return r==null?null:+r+1}}}
@@ -127,11 +129,15 @@ async function resolve(id,round,side,m){
    const r=ra||rb,from=ra?'a':'b';
    if(Date.now()-r.t>=REPORT_WAIT){decided=true;winner=r.w?from:(from==='a'?'b':'a')}}
   if(decided){
-   if(await db.setnx('rl:'+k,1,86400)){
-    res=winner?await applyResult(m,winner==='a'):null;
-    res=res?{w:winner,a:res.a,b:res.b}:{w:null};
-    await db.set('rs:'+k,res,86400)}
-   else res=await db.get('rs:'+k)}}
+   if(await db.setnx('rl:'+k,{t:Date.now()},86400)){
+    try{
+     res=winner?await applyResult(m,winner==='a'):null;
+     res=res?{w:winner,a:res.a,b:res.b}:{w:null};
+     await db.set('rs:'+k,res,86400)}
+    catch(e){await db.del('rl:'+k).catch(()=>{});throw e}}   // let the next poll retry
+   else{
+    res=await db.get('rs:'+k);
+    if(!res){const lk=await db.get('rl:'+k);if(lk&&Date.now()-(lk.t||0)>20000)await db.del('rl:'+k)}}}}   // a lock nobody finished (server restarted mid-save): free it
  if(!res)return{done:false};
  if(!res.w)return{done:true,void:true};
  const mine=res[side];return{done:true,win:res.w===side,delta:mine.delta,rating:mine.rating}}
