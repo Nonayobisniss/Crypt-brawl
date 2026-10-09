@@ -34,7 +34,7 @@ const REG_LIMIT=+process.env.CB_REG_LIMIT||8;        // accounts one connection 
 
 // ------------------------------------------------------------------ storage
 function memDb(){
- const kv=new Map(),z=new Map();
+ const kv=new Map(),z=new Map(),h=new Map();
  const exp=(k)=>{const e=kv.get(k);if(e&&e.x&&e.x<Date.now()){kv.delete(k);return null}return e};
  return{kind:'memory',
   async get(k){const e=exp(k);return e?JSON.parse(e.v):null},
@@ -43,7 +43,10 @@ function memDb(){
   async del(k){kv.delete(k)},
   async zset(n,m,s){if(!z.has(n))z.set(n,new Map());z.get(n).set(m,s)},
   async ztop(n,c){const a=[...(z.get(n)||new Map())].sort((x,y)=>y[1]-x[1]).slice(0,c);return a.map(([name,r])=>({name,rating:Math.round(r)}))},
-  async zrank(n,m){const a=[...(z.get(n)||new Map())].sort((x,y)=>y[1]-x[1]);const i=a.findIndex(e=>e[0]===m);return i<0?null:i+1}}}
+  async zrank(n,m){const a=[...(z.get(n)||new Map())].sort((x,y)=>y[1]-x[1]);const i=a.findIndex(e=>e[0]===m);return i<0?null:i+1},
+  async zcard(n){return(z.get(n)||new Map()).size},
+  async hset(k,f,v){if(!h.has(k))h.set(k,new Map());h.get(k).set(f,v)},
+  async hmget(k,fs){const m=h.get(k)||new Map();return fs.map(f=>m.has(f)?JSON.parse(m.get(f)):null)}}}
 function redisDb(){
  async function cmd(args){
   const r=await fetch(REDIS_URL,{method:'POST',headers:{Authorization:'Bearer '+REDIS_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(args)});
@@ -57,11 +60,35 @@ function redisDb(){
   async del(k){await cmd(['DEL',k])},
   async zset(n,m,s){await cmd(['ZADD',n,String(s),m])},
   async ztop(n,c){const a=await cmd(['ZREVRANGE',n,'0',String(c-1),'WITHSCORES']),o=[];for(let i=0;i+1<a.length;i+=2)o.push({name:a[i],rating:Math.round(+a[i+1])});return o},
-  async zrank(n,m){const r=await cmd(['ZREVRANK',n,m]);return r==null?null:+r+1}}}
+  async zrank(n,m){const r=await cmd(['ZREVRANK',n,m]);return r==null?null:+r+1},
+  async zcard(n){return+(await cmd(['ZCARD',n]))||0},
+  async hset(k,f,v){await cmd(['HSET',k,f,v])},
+  async hmget(k,fs){if(!fs.length)return[];const a=await cmd(['HMGET',k,...fs]);return a.map(v=>v==null?null:JSON.parse(v))}}}
 const db=REDIS_URL&&REDIS_TOKEN?redisDb():memDb();
 if(db.kind==='memory')console.log('WARNING: no database configured (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN). Accounts are kept in memory and will be lost on restart.');
 else console.log('Accounts are saved in Upstash Redis.');
 if(!process.env.AUTH_SECRET)console.log('WARNING: AUTH_SECRET is not set. Logins will stop working every time the server restarts.');
+
+// ------------------------------------------------------------------ levels, mood and matchmaking power
+const XP_WIN=50,XP_LOSS=20;                                   // XP for every ranked match you finish
+const xpAt=L=>50*(L-1)*L;                                      // total XP needed to reach level L (L2 = 100, L3 = 300, L4 = 600 ...)
+const levelOf=xp=>Math.min(99,Math.floor((1+Math.sqrt(1+0.08*Math.max(0,xp)))/2));
+// mood = how your recent results look: weighted last 10 results (newest count most), streaks of 3+ push it to the extremes
+function moodOf(f){
+ f=String(f||'');const n=f.length;if(n<3)return{v:0,label:'NEW'};
+ let sw=0,s=0;for(let i=0;i<n;i++){const w=Math.pow(.8,n-1-i);sw+=w;s+=w*(f[i]==='W'?1:-1)}
+ let v=s/sw,k=0;const last=f[n-1];for(let i=n-1;i>=0&&f[i]===last;i--)k++;
+ if(k>=3)v=last==='W'?Math.max(v,.8):Math.min(v,-.8);
+ return{v,label:v>=.75?'ON FIRE':v>=.35?'HOT':v>-.35?'STEADY':v>-.75?'COLD':'TILTED'}}
+// matchmaking power: rating is the base; level, win rate, mood and leaderboard position nudge it. Players are paired by power.
+function calcPower(u,rank,total){
+ const g=u.g|0,conf=g/(g+8),lvl=levelOf(u.x|0),wr=g?(u.w|0)/g:.5,m=moodOf(u.f);
+ const exp=Math.min(lvl,40)*1.5,                                 // experience: up to +60
+  form=(wr-.5)*160*conf,                                         // win rate, trusted more the more you have played: up to +-80
+  mood=m.v*50,                                                   // hot streak = up to +50, tilted = up to -50
+  pos=rank&&total>=2?(1-(rank-1)/(total-1))*40*Math.min(1,total/10):0;   // leaderboard position: up to +40 (only once there are enough players)
+ return Math.round(u.r+exp+form+mood+pos)}
+async function powerOf(u){const rank=await db.zrank('lb',u.n),total=await db.zcard('lb');return calcPower(u,rank,total)}
 
 // ------------------------------------------------------------------ accounts
 const NAME_RE=/^[A-Za-z0-9_]{3,16}$/,RESERVED=new Set(['guest','admin','administrator','moderator','mod','cpu','system','server','crypt_brawl']);
@@ -75,7 +102,9 @@ function readTok(tok){
   const a=Buffer.from(s),b=Buffer.from(want);if(a.length!==b.length||!crypto.timingSafeEqual(a,b))return null;
   const o=JSON.parse(Buffer.from(p,'base64url').toString());if(!o||!o.u||o.e<Date.now())return null;return o.u}catch(e){return null}}
 const ukey=n=>'u:'+String(n).toLowerCase();
-const profile=u=>({name:u.n,rating:u.r,games:u.g,wins:u.w,losses:u.l});
+function profile(u,rank,total){
+ const xp=u.x|0,lvl=levelOf(xp),m=moodOf(u.f);
+ return{name:u.n,rating:u.r,games:u.g,wins:u.w,losses:u.l,level:lvl,xp,xpCur:xpAt(lvl),xpNext:xpAt(lvl+1),mood:m.label,power:calcPower(u,rank,total)}}
 async function userFromTok(tok){const n=readTok(tok);if(!n)return null;return db.get(ukey(n))}
 async function hashPw(pw,salt){return(await scrypt(pw,salt,32)).toString('hex')}
 const clientIp=req=>String(req.headers['x-forwarded-for']||req.socket.remoteAddress||'').split(',')[0].trim();
@@ -87,9 +116,9 @@ async function register(req,b){
  if(RESERVED.has(name.toLowerCase()))throw fail(400,'That name is reserved.');
  if(pw.length<6||pw.length>64)throw fail(400,'Passwords need 6 to 64 characters.');
  if(limited('reg:'+clientIp(req),REG_LIMIT,3600000))throw fail(429,'Too many accounts created from this connection. Try again later.');
- const salt=crypto.randomBytes(16).toString('hex'),u={n:name,s:salt,h:await hashPw(pw,salt),r:START_RATING,g:0,w:0,l:0,c:Date.now()};
+ const salt=crypto.randomBytes(16).toString('hex'),u={n:name,s:salt,h:await hashPw(pw,salt),r:START_RATING,g:0,w:0,l:0,x:0,f:'',c:Date.now()};
  if(!(await db.setnx(ukey(name),u)))throw fail(409,'That name is taken. Try another.');
- await db.zset('lb',name,u.r);
+ await db.zset('lb',name,u.r);await db.hset('lbi',name,JSON.stringify({l:1,m:'NEW'}));
  return{token:mkTok(name),profile:profile(u)}}
 async function login(req,b){
  const name=String(b.name||'').trim(),pw=String(b.pass||'');
@@ -101,9 +130,13 @@ async function login(req,b){
  return{token:mkTok(u.n),profile:profile(u)}}
 async function me(b){
  const u=await userFromTok(b.token);if(!u)throw fail(401,'Please sign in again.');
- const rank=await db.zrank('lb',u.n);return{profile:{...profile(u),rank:rank||0}}}
+ const rank=await db.zrank('lb',u.n),total=await db.zcard('lb');return{profile:{...profile(u,rank,total),rank:rank||0}}}
 let lbCache={t:0,v:[]};
-async function leaderboard(){if(Date.now()-lbCache.t<8000)return lbCache.v;const v=await db.ztop('lb',20);lbCache={t:Date.now(),v};return v}
+async function leaderboard(){
+ if(Date.now()-lbCache.t<8000)return lbCache.v;
+ const top=await db.ztop('lb',20),info=top.length?await db.hmget('lbi',top.map(t=>t.name)):[];
+ const v=top.map((t,i)=>{const o=info[i]||{};return{...t,level:o.l||1,mood:o.m||'NEW'}});
+ lbCache={t:Date.now(),v};return v}
 
 // ------------------------------------------------------------------ ranked results
 function elo(ra,rb,aWon,ga,gb){
@@ -113,10 +146,16 @@ async function applyResult(m,aWon){
  const ua=await db.get(ukey(m.a.n)),ub=await db.get(ukey(m.b.n));
  if(!ua||!ub)return null;
  const r=elo(ua.r,ub.r,aWon,ua.g,ub.g),da=r.a-ua.r,dbb=r.b-ub.r;
+ const la0=levelOf(ua.x|0),lb0=levelOf(ub.x|0);
  ua.r=r.a;ub.r=r.b;ua.g++;ub.g++;if(aWon){ua.w++;ub.l++}else{ub.w++;ua.l++}
+ ua.x=(ua.x|0)+(aWon?XP_WIN:XP_LOSS);ub.x=(ub.x|0)+(aWon?XP_LOSS:XP_WIN);
+ ua.f=((ua.f||'')+(aWon?'W':'L')).slice(-10);ub.f=((ub.f||'')+(aWon?'L':'W')).slice(-10);
  await db.set(ukey(m.a.n),ua);await db.set(ukey(m.b.n),ub);
- await db.zset('lb',ua.n,ua.r);await db.zset('lb',ub.n,ub.r);lbCache.t=0;
- return{a:{rating:ua.r,delta:da},b:{rating:ub.r,delta:dbb}}}
+ await db.zset('lb',ua.n,ua.r);await db.zset('lb',ub.n,ub.r);
+ const ma=moodOf(ua.f),mb=moodOf(ub.f),la1=levelOf(ua.x),lb1=levelOf(ub.x);
+ await db.hset('lbi',ua.n,JSON.stringify({l:la1,m:ma.label}));await db.hset('lbi',ub.n,JSON.stringify({l:lb1,m:mb.label}));
+ lbCache.t=0;
+ return{a:{rating:ua.r,delta:da,xp:aWon?XP_WIN:XP_LOSS,lvl:la1,up:la1>la0,mood:ma.label},b:{rating:ub.r,delta:dbb,xp:aWon?XP_LOSS:XP_WIN,lvl:lb1,up:lb1>lb0,mood:mb.label}}}
 const sk=(id,round)=>id+':'+round;
 async function resolve(id,round,side,m){
  const k=sk(id,round);
@@ -140,7 +179,7 @@ async function resolve(id,round,side,m){
     if(!res){const lk=await db.get('rl:'+k);if(lk&&Date.now()-(lk.t||0)>20000)await db.del('rl:'+k)}}}}   // a lock nobody finished (server restarted mid-save): free it
  if(!res)return{done:false};
  if(!res.w)return{done:true,void:true};
- const mine=res[side];return{done:true,win:res.w===side,delta:mine.delta,rating:mine.rating}}
+ const mine=res[side];return{done:true,win:res.w===side,delta:mine.delta,rating:mine.rating,xp:mine.xp|0,level:mine.lvl||1,up:!!mine.up,mood:mine.mood||'NEW'}}
 async function report(b){
  const u=await userFromTok(b.token);if(!u)throw fail(401,'Please sign in again.');
  const id=String(b.match||'').slice(0,40),round=Math.max(0,Math.min(99,parseInt(b.round)||0));
@@ -171,7 +210,7 @@ function match(a,b){
  unqueue(a);unqueue(b);a.peer=b.id;b.peer=a.id;a.at=b.at=now();
  let mid='',oa=null,ob=null;
  if(a.user&&b.user){
-  mid=rid();oa={name:b.user.n,rating:b.user.r};ob={name:a.user.n,rating:a.user.r};
+  mid=rid();oa={name:b.user.n,rating:b.user.r,level:b.user.lvl};ob={name:a.user.n,rating:a.user.r,level:a.user.lvl};
   db.set('m:'+mid,{a:{n:a.user.n,r:a.user.r},b:{n:b.user.n,r:b.user.r},t:now()},86400).catch(e=>console.log('match save failed',e.message))}
  send(a,{t:'matched',role:'host',match:mid,opp:oa});send(b,{t:'matched',role:'guest',match:mid,opp:ob})}
 const win=t=>{const w=(now()-t.qt)/WSTEP;return w>=9?1e9:150+Math.floor(w)*75}   // rating range grows while you wait, anyone after ~9 steps
@@ -185,13 +224,13 @@ function tryMM(){
   let best=null,bd=1e9;
   for(const b of ranked){
    if(b===a||b.peer||b.user.n.toLowerCase()===a.user.n.toLowerCase())continue;
-   const d=Math.abs(a.user.r-b.user.r);
+   const d=Math.abs(a.user.mp-b.user.mp);
    if(d<=Math.max(win(a),win(b))&&d<bd){best=b;bd=d}}
   if(best)match(a,best)}
  stats()}
 function stats(){
  const online=T.size,nr=Q.filter(id=>{const t=T.get(id);return t&&t.user}).length,nc=Q.length-nr;
- for(const id of Q){const t=T.get(id);if(t)send(t,t.user?{t:'q',n:nr,online,w:Math.min(win(t),9999),r:t.user.r}:{t:'q',n:nc,online})}}
+ for(const id of Q){const t=T.get(id);if(t)send(t,t.user?{t:'q',n:nr,online,w:Math.min(win(t),9999),r:t.user.r,p:t.user.mp}:{t:'q',n:nc,online})}}
 function onStream(t){
  t.box.splice(0).forEach(o=>send(t,o));
  if(t.peer)return;
@@ -233,7 +272,7 @@ const srv=http.createServer(async(req,res)=>{
    if(mode==='mm'&&b.ranked){
     const usr=await userFromTok(b.token);if(!usr)return json(res,401,{error:'Please sign in to play ranked.'});
     for(const id of Q){const o=T.get(id);if(o&&o.user&&o.user.n.toLowerCase()===usr.n.toLowerCase())drop(o,false)}   // one search per account
-    t.user=usr}
+    t.user={n:usr.n,r:usr.r,lvl:levelOf(usr.x|0),mp:await powerOf(usr)}}
    if(mode==='create'){t.code=newCode();if(!t.code)return json(res,503,{error:'No free server codes.'});R.set(t.code,t.id)}
    if(mode==='join'){
     const c=String(b.code||'').toUpperCase().replace(/[^A-Z0-9]/g,''),h=T.get(R.get(c));
@@ -263,4 +302,5 @@ const srv=http.createServer(async(req,res)=>{
   try{json(res,503,{error:'Accounts are temporarily unavailable. Try again in a moment.'})}catch(e2){}}});
 process.on('unhandledRejection',e=>console.log('unhandled',e&&e.message));
 srv.listen(PORT,()=>console.log('Crypt Brawl matchmaker listening on port '+PORT));
+srv.sbmm={levelOf,xpAt,moodOf,calcPower,elo};
 module.exports=srv;
